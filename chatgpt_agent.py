@@ -18,7 +18,9 @@ from playwright.async_api import Browser, Page, async_playwright
 DEFAULT_CDP = "http://127.0.0.1:9222"
 DEFAULT_CHATGPT_URL = "https://chatgpt.com/"
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 53165
+SERVICE_ID = "multi-ask-daemon"
+PROVIDER_ID = "chatgpt"
 
 
 class AgentError(Exception):
@@ -78,7 +80,7 @@ async def assistant_messages(page: Page) -> list[str]:
     return await page.evaluate(
         """() => [...document.querySelectorAll('[data-message-author-role="assistant"]')]
           .map((el) => (el.innerText || el.textContent || '').trim())
-          .filter(Boolean)"""
+          .filter((text) => text && !['thinking', '正在思考'].includes(text.toLowerCase()))"""
     )
 
 
@@ -177,6 +179,8 @@ class ChatGPTAgent:
         chatgpt_page: Page | None = None
         for context in self.browser.contexts:
             for page in context.pages:
+                if page.is_closed():
+                    continue
                 if page.url == self.target_url:
                     return page
                 if page.url.startswith("https://chatgpt.com/") and "/codex/" not in page.url:
@@ -189,6 +193,12 @@ class ChatGPTAgent:
         await page.goto(self.target_url)
         await stable_wait()
         return page
+
+    async def ensure_page(self) -> Page:
+        if self.page and not self.page.is_closed():
+            return self.page
+        self.page = await self.find_or_open_page()
+        return self.page
 
     async def new_chat(self) -> dict[str, Any]:
         async with self.action_lock:
@@ -240,8 +250,7 @@ class ChatGPTAgent:
 
     async def handle_ask(self, job: Job) -> dict[str, Any]:
         async with self.action_lock:
-            page = self.page or await self.find_or_open_page()
-            self.page = page
+            page = await self.ensure_page()
             await page.bring_to_front()
             await stable_wait()
 
@@ -270,23 +279,27 @@ class ChatGPTAgent:
             }
 
     def status(self) -> dict[str, Any]:
+        current_url = None if not self.page or self.page.is_closed() else self.page.url
         return {
             "ok": True,
+            "service": SERVICE_ID,
+            "provider": PROVIDER_ID,
             "busy": self.running_request_id is not None,
             "running_request_id": self.running_request_id,
             "queue_length": self.queue.qsize(),
-            "current_url": self.page.url if self.page else None,
+            "current_url": current_url,
             "last_error": self.last_error,
             "uptime_seconds": round(time.time() - self.started_at, 3),
         }
 
     def error_payload(self, code: str, message: str, request_id: str | None = None) -> dict[str, Any]:
+        current_url = None if not self.page or self.page.is_closed() else self.page.url
         return {
             "ok": False,
             "code": code,
             "message": message,
             "request_id": request_id,
-            "current_url": self.page.url if self.page else None,
+            "current_url": current_url,
         }
 
 

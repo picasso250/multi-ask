@@ -18,7 +18,9 @@ from playwright.async_api import Browser, Page, async_playwright
 DEFAULT_CDP = "http://127.0.0.1:9222"
 DEFAULT_GEMINI_URL = "https://gemini.google.com/app"
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8768
+DEFAULT_PORT = 53168
+SERVICE_ID = "multi-ask-daemon"
+PROVIDER_ID = "gemini"
 INPUT_SELECTOR = 'div.ql-editor[contenteditable="true"], div[role="textbox"][aria-label*="Gemini"]'
 SEND_SELECTOR = 'button[aria-label*="Send"], button[aria-label*="Submit"], button.send-button'
 
@@ -173,6 +175,8 @@ class GeminiAgent:
         gemini_page: Page | None = None
         for context in self.browser.contexts:
             for page in context.pages:
+                if page.is_closed():
+                    continue
                 if page.url == self.target_url:
                     return page
                 if page.url.startswith("https://gemini.google.com/app"):
@@ -185,6 +189,12 @@ class GeminiAgent:
         await page.goto(self.target_url)
         await stable_wait()
         return page
+
+    async def ensure_page(self) -> Page:
+        if self.page and not self.page.is_closed():
+            return self.page
+        self.page = await self.find_or_open_page()
+        return self.page
 
     async def new_chat(self) -> dict[str, Any]:
         async with self.action_lock:
@@ -236,8 +246,7 @@ class GeminiAgent:
 
     async def handle_ask(self, job: Job) -> dict[str, Any]:
         async with self.action_lock:
-            page = self.page or await self.find_or_open_page()
-            self.page = page
+            page = await self.ensure_page()
             await page.bring_to_front()
             await stable_wait()
 
@@ -261,23 +270,27 @@ class GeminiAgent:
             }
 
     def status(self) -> dict[str, Any]:
+        current_url = None if not self.page or self.page.is_closed() else self.page.url
         return {
             "ok": True,
+            "service": SERVICE_ID,
+            "provider": PROVIDER_ID,
             "busy": self.running_request_id is not None,
             "running_request_id": self.running_request_id,
             "queue_length": self.queue.qsize(),
-            "current_url": self.page.url if self.page else None,
+            "current_url": current_url,
             "last_error": self.last_error,
             "uptime_seconds": round(time.time() - self.started_at, 3),
         }
 
     def error_payload(self, code: str, message: str, request_id: str | None = None) -> dict[str, Any]:
+        current_url = None if not self.page or self.page.is_closed() else self.page.url
         return {
             "ok": False,
             "code": code,
             "message": message,
             "request_id": request_id,
-            "current_url": self.page.url if self.page else None,
+            "current_url": current_url,
         }
 
 
