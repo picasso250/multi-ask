@@ -29,12 +29,6 @@ chrome.exe --remote-debugging-port=9222
 
 ## 快速开始
 
-先确认两个 daemon 状态；如果缺失，显式启动：
-
-```powershell
-python .\multi_ask.py status --json --ensure
-```
-
 向两个 provider 并行提问：
 
 ```powershell
@@ -47,10 +41,18 @@ python .\multi_ask.py ask "reply only 42"
 python .\multi_ask.py ask "用一句话解释 MCP" --json
 ```
 
+## 常用命令
+
 开启两个新对话：
 
 ```powershell
 python .\multi_ask.py new-chat
+```
+
+查看状态，并在缺失时启动 daemon：
+
+```powershell
+python .\multi_ask.py status --json --ensure
 ```
 
 只查看状态，不自动启动 daemon：
