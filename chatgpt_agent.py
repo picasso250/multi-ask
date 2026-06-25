@@ -430,7 +430,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ask_parser = subparsers.add_parser("ask", help="Send one prompt through the daemon.")
     ask_parser.add_argument("--host", default=DEFAULT_HOST)
     ask_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    ask_parser.add_argument("prompt")
+    ask_parser.add_argument("prompt", nargs="?", help="Prompt text. Omit when using --prompt-file.")
+    ask_parser.add_argument("--prompt-file", help="Read prompt text from this UTF-8 file.")
     ask_parser.add_argument("--timeout", type=float, default=180.0)
     ask_parser.add_argument("--stable-seconds", type=float, default=5.0)
     ask_parser.add_argument("--json", action="store_true")
@@ -457,10 +458,17 @@ def main(argv: list[str]) -> int:
             return 0
         return 0
     if args.command == "ask":
+        prompt = args.prompt
+        if args.prompt_file:
+            with open(args.prompt_file, "r", encoding="utf-8") as file:
+                prompt = file.read()
+        if not prompt:
+            print("Missing prompt or --prompt-file.", file=sys.stderr)
+            return 2
         payload = request_json(
             "POST",
             "/ask",
-            {"prompt": args.prompt, "timeout": args.timeout, "stable_seconds": args.stable_seconds},
+            {"prompt": prompt, "timeout": args.timeout, "stable_seconds": args.stable_seconds},
             args.host,
             args.port,
         )

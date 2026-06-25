@@ -146,7 +146,8 @@ async def ask_chatgpt(args: argparse.Namespace) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send one prompt to an open ChatGPT tab and print the response.")
-    parser.add_argument("prompt", help="Prompt text to type into ChatGPT.")
+    parser.add_argument("prompt", nargs="?", help="Prompt text. Omit when using --prompt-file.")
+    parser.add_argument("--prompt-file", help="Read prompt text from this UTF-8 file.")
     parser.add_argument("--cdp-url", default=DEFAULT_CDP, help=f"Chrome DevTools URL. Default: {DEFAULT_CDP}")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"Exact ChatGPT tab URL to reuse. Default: {DEFAULT_URL}")
     parser.add_argument("--timeout", type=float, default=180.0, help="Seconds to wait for the response.")
@@ -161,6 +162,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    prompt = args.prompt
+    if args.prompt_file:
+        with open(args.prompt_file, "r", encoding="utf-8") as file:
+            prompt = file.read()
+    if not prompt:
+        print("Missing prompt or --prompt-file.", file=sys.stderr)
+        return 2
+    args.prompt = prompt
     response = asyncio.run(ask_chatgpt(args))
     print(response)
     return 0
