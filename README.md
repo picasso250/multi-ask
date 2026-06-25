@@ -6,7 +6,8 @@
 
 ## 功能
 
-- 同时询问 ChatGPT 和 Gemini
+- 同时询问 ChatGPT 和 Gemini，也可以只询问其中一个
+- 支持从 UTF-8 prompt 文件读取问题
 - 自动启动本项目的本地 daemon
 - 支持查看 daemon 状态和开启新对话
 - daemon 会识别自己的服务身份，避免误连到同端口上的其他服务
@@ -41,12 +42,26 @@ python .\multi_ask.py ask "reply only 42"
 python .\multi_ask.py ask "用一句话解释 MCP" --json
 ```
 
+只问单个 provider：
+
+```powershell
+python .\multi_ask.py ask "reply only 42" --provider chatgpt
+python .\multi_ask.py ask "reply only 42" --provider gemini
+```
+
+从文件读取 prompt：
+
+```powershell
+python .\multi_ask.py ask --prompt-file .\prompt.md --provider chatgpt
+```
+
 ## 常用命令
 
-开启两个新对话：
+开启新对话：
 
 ```powershell
 python .\multi_ask.py new-chat
+python .\multi_ask.py new-chat --provider chatgpt
 ```
 
 查看状态，并在缺失时启动 daemon：
@@ -77,21 +92,18 @@ python .\multi_ask.py status --json
 
 如果目标端口被其他 HTTP 服务占用，`multi_ask.py` 会返回 `identity_mismatch`，不会杀掉或覆盖该服务。
 
-## 单 provider CLI
+## 单 provider
 
-也可以直接操作单个 provider daemon：
+推荐统一使用 `multi_ask.py --provider` 路由到单个 provider。`multi_ask.py` 会在需要时自动启动对应 daemon：
 
 ```powershell
-python .\chatgpt_agent.py status --json
-python .\chatgpt_agent.py ask "hello"
-python .\chatgpt_agent.py new-chat
-
-python .\gemini_agent.py status --json
-python .\gemini_agent.py ask "hello"
-python .\gemini_agent.py new-chat
+python .\multi_ask.py ask "hello" --provider chatgpt
+python .\multi_ask.py ask "hello" --provider gemini
+python .\multi_ask.py status --json --ensure --provider chatgpt
+python .\multi_ask.py new-chat --provider gemini
 ```
 
-单 provider CLI 不会自动启动 daemon；自动启动只在 `multi_ask.py` 中实现。
+`chatgpt_agent.py` 和 `gemini_agent.py` 仍保留 daemon/server 实现与底层调试入口；日常使用不需要直接调用。
 
 ## 日志
 

@@ -239,8 +239,7 @@ def print_json(results: dict[str, dict[str, Any]]) -> None:
 
 
 def print_markdown(results: dict[str, dict[str, Any]]) -> None:
-    for key in ("chatgpt", "gemini"):
-        payload = results[key]
+    for payload in results.values():
         label = payload["provider_label"]
         print(f"## {label}")
         print()
@@ -261,6 +260,12 @@ def exit_code(results: dict[str, dict[str, Any]]) -> int:
 
 
 def add_common_provider_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--provider",
+        choices=["both", "chatgpt", "gemini"],
+        default="both",
+        help="Which provider to use. Default: both.",
+    )
     parser.add_argument("--chatgpt-host", default=DEFAULT_CHATGPT_HOST)
     parser.add_argument("--chatgpt-port", type=int, default=DEFAULT_CHATGPT_PORT)
     parser.add_argument("--gemini-host", default=DEFAULT_GEMINI_HOST)
@@ -272,9 +277,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send prompts to ChatGPT and Gemini daemons in parallel.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    ask_parser = subparsers.add_parser("ask", help="Ask both providers and print both raw replies.")
+    ask_parser = subparsers.add_parser("ask", help="Ask one or both providers and print raw replies.")
     add_common_provider_args(ask_parser)
-    ask_parser.add_argument("prompt")
+    ask_parser.add_argument("prompt", nargs="?", help="Prompt text. Omit when using --prompt-file.")
+    ask_parser.add_argument("--prompt-file", help="Read prompt text from this UTF-8 file.")
     ask_parser.add_argument("--timeout", type=float, default=180.0)
     ask_parser.add_argument("--stable-seconds", type=float, default=5.0)
 
@@ -288,8 +294,28 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-async def run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
+def selected_providers(args: argparse.Namespace) -> list[Provider]:
     providers = provider_list(args)
+    if args.provider == "both":
+        return providers
+    return [provider for provider in providers if provider.key == args.provider]
+
+
+def load_prompt(args: argparse.Namespace) -> None:
+    if args.command != "ask":
+        return
+    prompt = args.prompt
+    if args.prompt_file:
+        with open(args.prompt_file, "r", encoding="utf-8") as file:
+            prompt = file.read()
+    if not prompt:
+        print("Missing prompt or --prompt-file.", file=sys.stderr)
+        raise SystemExit(2)
+    args.prompt = prompt
+
+
+async def run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
+    providers = selected_providers(args)
     if args.command == "ask":
         return await call_all(
             providers,
@@ -307,6 +333,7 @@ async def run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    load_prompt(args)
     results = asyncio.run(run(args))
     if args.json:
         print_json(results)
